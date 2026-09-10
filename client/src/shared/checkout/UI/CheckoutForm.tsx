@@ -24,7 +24,7 @@ const CheckoutForm = () => {
     await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${import.meta.env.VITE_VERCEL_URL}/order`,
+        return_url: `http://localhost:5173/order`,
       },
     });
   };

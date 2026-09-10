@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { IoIosArrowForward } from "react-icons/io";
-import { CheckoutSteps } from "../../../shared/checkout_steps/CheckoutSteps.tsx";
 import CartItemInterface from "../../cart/components/cart_item/interface/CartItemInterface.tsx";
 import api from "../../../axios.ts";
 import { colorNames } from "../../cart/components/cart_item/components/color.ts";
