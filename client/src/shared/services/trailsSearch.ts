@@ -1,23 +1,6 @@
 import { getTrailPhotos } from "./pexelRequest";
-import { getORSDistance } from "./orsDistanceCalculation";
+import { parseOsmDistance, trailLengthKm } from "./trailLength";
 import { Trail } from "../../pages/Trails/interfaces/TrailInterface";
-
-const orsCache = new Map<string, string>();
-
-const getCachedDistance = async (
-  startLat: number,
-  startLon: number,
-  endLat: number,
-  endLon: number,
-): Promise<string> => {
-  const key = `${startLat.toFixed(4)},${startLon.toFixed(4)}-${endLat.toFixed(4)},${endLon.toFixed(4)}`;
-  const cached = orsCache.get(key);
-  if (cached) return cached;
-
-  const distance = await getORSDistance(startLat, startLon, endLat, endLon);
-  if (distance !== "—") orsCache.set(key, distance);
-  return distance;
-};
 
 export const trailsSearch = async ({
   routes,
@@ -40,17 +23,11 @@ export const trailsSearch = async ({
         members[members.length - 1]?.geometry?.[
           members[members.length - 1].geometry.length - 1
         ];
-      const [photos, distance] = await Promise.all([
-        getTrailPhotos(trailName),
-        startCoord && endCoord
-          ? getCachedDistance(
-              startCoord.lat,
-              startCoord.lon,
-              endCoord.lat,
-              endCoord.lon,
-            )
-          : Promise.resolve("—"),
-      ]);
+
+      const distance =
+        parseOsmDistance(route.tags?.distance) ?? trailLengthKm(members);
+
+      const photos = await getTrailPhotos(trailName);
 
       return {
         id: route.id,
