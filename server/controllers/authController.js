@@ -2,28 +2,47 @@ import { prisma } from "../config/db.js";
 import bcrypt, { compare } from "bcrypt";
 import crypto from "crypto";
 import { config } from "dotenv";
-import { generateToken } from "../config/generateToken.js";
+import { generateToken, clearAuthCookie } from "../config/generateToken.js";
 import { resend } from "../config/resendSDK.js";
 
 config();
 
-// The deployment platforms set the unprefixed names; the local .env only has
-// the VITE_ ones, which Vite exposes to the client bundle rather than the
-// server. Falling back keeps the verification links valid in both places.
-const APP_URL = process.env.VERCEL_URL || process.env.VITE_VERCEL_URL || "";
-const API_URL = process.env.RENDER_URL || process.env.VITE_RENDER_URL || "";
+// A trailing slash in the env value would produce links like host//api/...,
+// which Express treats as a different path and answers with 404.
+const trimSlash = (url) => url.replace(/\/+$/, "");
+
+// Defaults target the local dev servers. The deployment platforms set these
+// names in their own environment, which takes priority.
+const APP_URL = trimSlash(process.env.VERCEL_URL || "http://localhost:5173");
+const API_URL = trimSlash(process.env.RENDER_URL || "http://localhost:4996");
 
 export const getUser = async (req, res) => {
   try {
+    // Only the fields the profile screen renders. The password hash and the
+    // email verification token must never reach the browser.
     const user = await prisma.user.findFirst({
       where: {
         id: req.user.id,
       },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        emailVerified: true,
+        createdAt: true,
+      },
     });
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "Account no longer exists", code: "SESSION_INVALID" });
+    }
 
     return res.status(200).json(user);
   } catch (err) {
-    return res.status(500).send("User was not found: ", err);
+    return res.status(500).json({ message: "Failed to load user" });
   }
 };
 
@@ -115,7 +134,8 @@ export const register = async (req, res) => {
     // link is used, and the user then signs in through /login.
     return res.status(201).json({
       user: safeUser,
-      message: "Registration successful. Check your email to verify the account.",
+      message:
+        "Registration successful. Check your email to verify the account.",
     });
   } catch (err) {
     console.log("Server Error: ", err);
@@ -196,10 +216,7 @@ export const login = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
-  res.cookie("jwt", "", {
-    httpOnly: true,
-    expires: new Date(),
-  });
+  clearAuthCookie(res);
 
   return res.status(201).json({
     message: "User was successfully logged out",

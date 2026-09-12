@@ -47,13 +47,19 @@ const Profile = () => {
       .get("/api/user/get_user", { withCredentials: true })
       .then((res) => {
         const user = res.data;
+        if (!user) return;
         setForm((prev) => ({
           ...prev,
           fullName: user.fullName ?? "",
           email: user.email ?? "",
         }));
       })
-      .catch(() => toast.error("Failed to load profile"));
+      .catch((err) => {
+        // A removed account is handled by the axios interceptor, which sends
+        // the browser to the login page, so there is nothing to report here.
+        if (err?.response?.data?.code === "SESSION_INVALID") return;
+        toast.error("Failed to load profile");
+      });
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
