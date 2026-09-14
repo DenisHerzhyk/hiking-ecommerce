@@ -19,6 +19,7 @@ TrailBlaze is a full-stack hiking e-commerce platform that blends outdoor gear s
   **Trail Discovery**
 - Search trails by city, park, or region (OpenStreetMap / Overpass API)
 - Interactive Leaflet maps with route, elevation, and difficulty
+- Trail length computed locally from the Overpass geometry, so the list needs no routing API call
 - Quick-search presets (Swiss Alps, Black Forest, Dolomites, Pyrenees)
   **AI Gear Advisor**
 - Powered by Claude (Anthropic)
@@ -53,7 +54,9 @@ TrailBlaze is a full-stack hiking e-commerce platform that blends outdoor gear s
 │   └── src/
 │       ├── pages/              # home, category, product_page, cart, login,
 │       │                       # register, profile, order, Trails, admin
-│       └── shared/             # header, footer, checkout, shared components
+│       ├── shared/             # header, footer, checkout, shared components
+│       │   └── services/       # external API clients, trail length calculation
+│       └── axios.ts            # shared client, redirects on an invalid session
 ├── server/                     # Express backend
 │   ├── config/                 # database, JWT, Resend config
 │   ├── middlewares/            # auth middleware
@@ -99,8 +102,11 @@ ANTHROPIC_API_KEY=your-anthropic-key
 ORS_API_KEY=your-openrouteservice-key
 RESEND_API_KEY=your-resend-key
 
-VITE_VERCEL_URL=https://hiking-ecommerce.vercel.app
-VITE_RENDER_URL=https://trailblaze-blr0.onrender.com
+# Base URLs used to build email verification links and post-verify redirects.
+# Both default to the local dev servers when unset, so they can be omitted
+# during local development. Deployed environments set them to real hosts.
+VERCEL_URL=http://localhost:5173
+RENDER_URL=http://localhost:4996
 ```
 
 ```bash
@@ -148,39 +154,68 @@ npm run dev
 
 All routes are prefixed with `/api`.
 
-| Route                                   | Purpose                        | Auth      |
-| --------------------------------------- | ------------------------------ | --------- |
-| `GET /products`                         | List all products              | ✗         |
-| `GET /products/:id`                     | Product details                | ✗         |
-| `POST /user/register`                   | Create account                 | ✗         |
-| `POST /user/login`                      | Log in                         | ✗         |
-| `POST /user/logout`                     | Log out                        | ✓         |
-| `GET /user/profile`                     | Get profile                    | ✓         |
-| `PUT /user/profile`                     | Update profile                 | ✓         |
-| `GET /cart`                             | Get cart items                 | ✓         |
-| `POST /cart/add`                        | Add to cart                    | ✓         |
-| `DELETE /cart/:id`                      | Remove from cart               | ✓         |
-| `POST /cart/moveToWishlist`             | Move item to wishlist          | ✓         |
-| `GET /wishlist`                         | Get wishlist                   | ✓         |
-| `POST /wishlist/moveToCart`             | Move item to cart              | ✓         |
-| `POST /checkout`                        | Create payment intent (Stripe) | ✓         |
-| `GET /orders`                           | List orders                    | ✓         |
-| `POST /orders/confirm`                  | Confirm payment & create order | ✓         |
-| `GET /overpass/query`                   | Search hiking trails           | ✗         |
-| `GET /ors/directions`                   | Get hiking route directions    | ✗         |
-| `GET /open-meteo/forecast`              | Weather forecast               | ✗         |
-| `POST /ai/suggest`                      | AI gear recommendation         | ✗         |
-| `GET /pexels/search`                    | Trail stock photos             | ✗         |
-| `PUT /admin/add/:productId`             | Increase stock for a size      | ✓ (admin) |
-| `PUT /admin/decrease/:productId`        | Decrease stock for a size      | ✓ (admin) |
-| `DELETE /admin/remove/:productId/:size` | Remove a size from a product   | ✓ (admin) |
+| Route                                   | Purpose                            | Auth      |
+| --------------------------------------- | ---------------------------------- | --------- |
+| `GET /products`                         | List all products                  | ✗         |
+| `GET /products/:productId`              | Product details                    | ✗         |
+| `POST /user/register`                   | Create account                     | ✗         |
+| `GET /user/verify-email`                | Confirm email from the mailed link | ✗         |
+| `POST /user/login`                      | Log in                             | ✗         |
+| `POST /user/logout`                     | Log out and clear the cookie       | ✗         |
+| `GET /user/profile`                     | Session check                      | ✓         |
+| `GET /user/get_user`                    | Profile details                    | ✓         |
+| `PUT /user/change`                      | Update profile                     | ✓         |
+| `GET /cart`                             | Get cart items                     | ✓         |
+| `POST /cart/add/:productId`             | Add to cart                        | ✓         |
+| `POST /cart/update/:id`                 | Change item quantity               | ✓         |
+| `DELETE /cart/remove/:productId`        | Remove from cart                   | ✓         |
+| `POST /cart/movewishlist/:productId`    | Move item to wishlist              | ✓         |
+| `GET /wishlist`                         | Get wishlist                       | ✓         |
+| `POST /wishlist/add/:productId`         | Add to wishlist                    | ✓         |
+| `DELETE /wishlist/remove/:productId`    | Remove from wishlist               | ✓         |
+| `POST /wishlist/movecart/:productId`    | Move item to cart                  | ✓         |
+| `GET /checkout`                         | Get checkout session               | ✓         |
+| `POST /checkout/add`                    | Create payment intent (Stripe)     | ✓         |
+| `GET /orders`                           | List orders                        | ✓         |
+| `POST /orders/confirm`                  | Confirm payment & create order     | ✓         |
+| `GET /delivery/get_default_address`     | Default shipping address           | ✓         |
+| `POST /overpass/interpreter`            | Search hiking trails               | ✗         |
+| `POST /ors/hiking-route`                | Route geometry for the trail map   | ✗         |
+| `GET /osm/search`                       | Geocode a place name               | ✗         |
+| `GET /open-meteo/forecast`              | Weather forecast                   | ✗         |
+| `GET /open-meteo/elevation`             | Elevation data                     | ✗         |
+| `POST /ai/suggest`                      | AI gear recommendation             | ✗         |
+| `GET /pexels/search`                    | Trail stock photos                 | ✗         |
+| `PUT /admin/add/:productId`             | Increase stock for a size          | ✓ (admin) |
+| `PUT /admin/decrease/:productId`        | Decrease stock for a size          | ✓ (admin) |
+| `DELETE /admin/remove/:productId/:size` | Remove a size from a product       | ✓ (admin) |
+
+---
+
+## 🔐 Authentication & Sessions
+
+Login issues a signed JWT in an httpOnly cookie. On every protected request the
+middleware verifies the signature **and** confirms the account still exists in the
+database, so a token belonging to a deleted user stops working immediately.
+
+Failures are reported with a code the client acts on:
+
+| Code              | Meaning                              | Client behaviour            |
+| ----------------- | ------------------------------------ | --------------------------- |
+| `NO_SESSION`      | No cookie sent, visitor is anonymous | Ignored, public pages work  |
+| `SESSION_INVALID` | Cookie present but expired, malformed, or the account was removed | Cookie cleared, redirect to `/login` |
+
+Admin routes re-read the role from the database rather than trusting the token,
+so revoking an admin takes effect without waiting for the token to expire.
 
 ---
 
 ## 🤖 AI Gear Recommendation Flow
 
 1. User searches for a trail → resolved via Nominatim geocoding.
-2. Trail data fetched from Overpass API; route generated via OpenRouteService.
+2. Trail data fetched from Overpass API. Trail length is summed from that geometry
+   locally; OpenRouteService is called only on the trail detail page, to draw the
+   route line on the map.
 3. Weather forecast pulled from Open-Meteo for the chosen date.
 4. On "Get AI Suggestion," Claude receives trail difficulty, weather, and the product catalog, and recommends gear from inventory.
 
