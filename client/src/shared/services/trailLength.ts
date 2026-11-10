@@ -13,8 +13,6 @@ const haversine = (a: Point, b: Point): number => {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 };
 
-// OSM relations often carry a "distance" tag: "12", "12 km", "7.5mi".
-// Trust it when it parses, since the mapper measured the real route.
 export const parseOsmDistance = (raw?: string): string | null => {
   if (!raw) return null;
   const match = raw.trim().match(/^([\d.]+)\s*(km|mi|m)?$/i);
@@ -29,7 +27,6 @@ export const parseOsmDistance = (raw?: string): string | null => {
   return km.toFixed(1);
 };
 
-// Sums the geometry Overpass already returned, so no routing API call is needed.
 export const trailLengthKm = (members: any[]): string => {
   let total = 0;
 

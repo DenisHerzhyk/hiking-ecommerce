@@ -32,7 +32,7 @@ Respond ONLY with a raw JSON object. No markdown, no backticks, no explanation. 
         {
           role: "user",
           content: `            
-           Trail: ${trailName}
+          Trail: ${trailName}
           Difficulty: ${difficulty}
           Temperature: ${weather.temp}°C
           Precipitation: ${weather.precipitation}mm

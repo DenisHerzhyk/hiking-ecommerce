@@ -108,7 +108,7 @@ const MainProductCard = ({
         </ul>
         <button
           className="absolute top-2 right-2 z-10 text-3xl group/save cursor-pointer"
-          onClick={() => handleAddToWishlist()}
+          onClick={() => handleAddToWishlist()} 
         >
           <VscHeart className="transition-opacity duration-300 ease-in opacity-100 group-hover:opacity-0" />
           <VscHeartFilled className="absolute top-0 right-0 transition-opacity duration-300 ease-in opacity-0 group-hover:opacity-100" />
